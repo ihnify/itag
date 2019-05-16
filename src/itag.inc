@@ -31,9 +31,15 @@
 #if ITAG_DEBUG_INFO
 	static IT_DebugStr[144];
 
-	#define IT_DebugMessage(%1) \
-		printf(IT_DebugStr, "IT: " %1)
+	#define IT_DebugMessageError(%1) \
+		format(IT_DebugStr, sizeof(IT_DebugStr), %1), printf("IT_Error: " %1, IT_DebugStr)
 #endif
+
+/*
+    const
+*/
+
+const RPC_onShowPlayerNameTag = 80;
 
 /*
     enums
@@ -54,34 +60,38 @@ static
 	gTagInfo[MAX_PLAYERS][e_ITAG_INFO],
 
 	bool:gTagStatus;
-    
 
 /*
-    const
+    OnGameModeInit
 */
 
-const RPC_onShowPlayerNameTag = 80;
+#if defined _inc_y_hooks || defined _INC_y_hooks
+	hook OnGameModeInit()
+#else
+	public OnGameModeInit()
+#endif
+	{
+		gTagStatus = true;
 
-/*
-    ORPC
-*/
-
-ORPC:RPC_onShowPlayerNameTag(playerid, BitStream:bs) 
-{
-	if (playerid == -1) {
-		return 0;
+		#if defined ITAG_OnGameModeInit
+			return ITAG_OnGameModeInit();
+		#else
+			return 1;
+		#endif
 	}
 
-    static
-		playerId,
-        bool:tag;
+#if !defined _inc_y_hooks && !defined _INC_y_hooks
+	#if defined _ALS_OnGameModeInit
+		#undef OnGameModeInit
+	#else
+		#define _ALS_OnGameModeInit
+	#endif
 
-    BS_ReadUint16(bs, playerId);
-    BS_ReadUint8(bs, tag);
-
-
-    return 1;
-}
+	#define OnGameModeInit ITAG_OnGameModeInit
+	#if defined ITAG_OnGameModeInit
+		forward ITAG_OnGameModeInit();
+	#endif
+#endif
 
 /*
     OnPlayerConnect
@@ -94,6 +104,7 @@ ORPC:RPC_onShowPlayerNameTag(playerid, BitStream:bs)
 #endif
 	{
 		GetPlayerName(playerid, gTagInfo[playerid][e_TName], MAX_PLAYER_NAME);
+		IT_ResetNameTagInfo(playerid);
 		#if defined ITAG_OnPlayerConnect
 			return ITAG_OnPlayerConnect(playerid);
 		#else
@@ -152,10 +163,10 @@ ORPC:RPC_onShowPlayerNameTag(playerid, BitStream:bs)
 	public OnPlayerStreamIn(playerid, forplayerid)
 #endif
 	{
-		if (gTagStatus && !gTagInfo[forplayerid][e_TShow]) {
-			IT_Enable3DNameTagForPlayer(playerid, forplayerid, true);
-			IT_OnRPCSendNameTag(playerid, forplayerid, false);
-		} else if (gTagInfo[forplayerid][e_TShow]) {
+		if (!gTagStatus && gTagInfo[forplayerid][e_TShow]) {
+			IT_Enable3DNameTagForType(playerid, forplayerid, false);
+			IT_OnRPCSendNameTag(forplayerid, playerid, false);
+		} else if (!gTagInfo[forplayerid][e_TShow]) {
 			IT_OnRPCSendNameTag(playerid, forplayerid, false);
 		}
 		#if defined ITAG_OnPlayerStreamIn
@@ -181,83 +192,84 @@ ORPC:RPC_onShowPlayerNameTag(playerid, BitStream:bs)
     stock
 */
 
-static stock IT_OnRPCSendNameTag(fromplayerid, toplayerid, bool:show)
-{
-	new
-		BitStream:bs = BS_New();
-
-	BS_WriteValue (
-		bs,
-		PR_UINT16, toplayerid,
-		PR_UINT8, show);
-	BS_RPC (bs, fromplayerid, RPC_onShowPlayerNameTag, PR_LOW_PRIORITY, PR_RELIABLE_ORDERED);
-	BS_Delete (bs);
-	return 1;
-}
-
 stock IT_Enable3DNameTagForType(fromplayerid, toplayerid = INVALID_PLAYER_ID, bool:enable, bool:enableLabel = true, Float:drawdistance = DEFAULT_ITAG_RADIUS, color = 0xFFFFFFFF, const inputtext[] = "")
 {
 	if (strlen(inputtext) > MAX_ITAG_FORMAT_STRING) {
-	   	return IT_DebugMessage("The maximum number of characters %d", MAX_ITAG_FORMAT_STRING);
+	   	return IT_DebugMessageError("The maximum number of characters %d", MAX_ITAG_FORMAT_STRING);
 	}
 
 	if (toplayerid == INVALID_PLAYER_ID) {
+		if (gTagStatus == enable) {
+			return IT_DebugMessageError("NameTag is now %s", enable ? "enable" : "disable");
+		}
+
 		gTagStatus = enable;
 		
 		#if defined foreach
 			foreach (new playerid : Player) {
+				if (gTagInfo[playerid][e_TShow] == enable) {
+					continue;
+				}
 		#else
 			for (playerid = GetPlayerPoolSize(); playerid != -1; playerid--) {
 				if (!IsPlayerConnected(playerid)) {
 					continue;
 				}
 		#endif
-				IT_Enable3DNameTagForPlayer(fromplayerid, playerid, enable, enableLabel, drawdistance, color, inputtext);
+				IT_Enable3DNameTag(fromplayerid, playerid, enable, enableLabel, drawdistance, color, inputtext);
 			}
 	} else {
-		IT_Enable3DNameTagForPlayer(fromplayerid, toplayerid, enable, enableLabel, drawdistance, color, inputtext);
+		IT_Enable3DNameTag(fromplayerid, toplayerid, enable, enableLabel, drawdistance, color, inputtext);
 	}
 	return 1;
 }
 
-static stock IT_Enable3DNameTagForPlayer(fromplayerid, toplayerid, bool:enable, bool:enableLabel = true, Float:drawdistance = DEFAULT_ITAG_RADIUS, color = 0xFFFFFFFF, const inputtext[] = "")
+static stock IT_Enable3DNameTag(fromplayerid, toplayerid, bool:enable, bool:enableLabel = true, Float:drawdistance = DEFAULT_ITAG_RADIUS, color = 0xFFFFFFFF, const inputtext[] = "")
 {
 	gTagInfo[toplayerid][e_TShow] = enable;
 
 	static Float:player_x, Float:player_y, Float:player_z;
 	GetPlayerPos(toplayerid, player_x, player_y, player_z);
 
-	if (!gTagInfo[toplayerid][e_T3DText]) {
-		static 
-			fmt_tag[MAX_ITAG_FORMAT_STRING];
+	if (!enable) {
+		if (!gTagInfo[toplayerid][e_T3DText]) {
+			static 
+				fmt_tag[MAX_ITAG_FORMAT_STRING];
 
-		if (strlen (inputtext) > 0) {
-			format(fmt_tag, sizeof(fmt_tag), "%s", inputtext);
-		} else {
-			format(fmt_tag, sizeof(fmt_tag), "%s(%d)", gTagInfo[toplayerid][e_TName], toplayerid);
+			if (strlen (inputtext) > 0) {
+				format(fmt_tag, sizeof(fmt_tag), "%s", inputtext);
+			} else {
+				format(fmt_tag, sizeof(fmt_tag), "%s(%d)", gTagInfo[toplayerid][e_TName], toplayerid);
+			}
+
+			IT_OnRPCSendNameTag(fromplayerid, toplayerid, enable); // for toplayer
+			
+			if (fromplayerid == toplayerid) {
+				IT_OnRPCSendNameTag(toplayerid, fromplayerid, enable); // for fromplayer
+			}
+
+			if (enableLabel) {
+				#if defined _streamer_included
+					gTagInfo[toplayerid][e_T3DText] = CreateDynamic3DTextLabel(fmt_tag, color, player_x, player_y, player_z + 0.17, drawdistance, toplayerid, .testlos = 1);
+				#else
+					gTagInfo[toplayerid][e_T3DText] = Create3DTextLabel(fmt_tag, color, 0.0, 0.0, 0.0, drawdistance, -1, 1);
+					Attach3DTextLabelToPlayer(gTagInfo[toplayerid][e_T3DText], toplayerid, 0.0, 0.0, 0.17);
+				#endif
+			}
 		}
-
+	} else {
 		IT_OnRPCSendNameTag(fromplayerid, toplayerid, enable);
-		
+			
 		if (fromplayerid == toplayerid) {
 			IT_OnRPCSendNameTag(toplayerid, fromplayerid, enable);
 		}
 
-		if (enableLabel) {
-			#if defined _streamer_included
-				gTagInfo[toplayerid][e_T3DText] = CreateDynamic3DTextLabel(fmt_tag, color, player_x, player_y, player_z + 0.17, drawdistance, toplayerid, .testlos = 1);
-			#else
-				gTagInfo[toplayerid][e_T3DText] = Create3DTextLabel(fmt_tag, color, 0.0, 0.0, 0.0, drawdistance, -1, 1);
-				Attach3DTextLabelToPlayer(gTagInfo[toplayerid][e_T3DText], toplayerid, 0.0, 0.0, 0.17);
-			#endif
-		}
-	} else {
-		IT_ResetNameTagInfo(toplayerid);
+		IT_ResetNameTagInfo(toplayerid, enable);
 	}
 	return 1;
 }
 
-static stock IT_ResetNameTagInfo(playerid)
+static stock IT_ResetNameTagInfo(playerid, bool:enable = true)
 {
 	#if defined _streamer_included
         if (gTagInfo[playerid][e_T3DText]) {
@@ -271,6 +283,20 @@ static stock IT_ResetNameTagInfo(playerid)
         }
     #endif
 
-	gTagInfo[playerid][e_TShow] = false;
+	gTagInfo[playerid][e_TShow] = enable;
+	return 1;
+}
+
+static stock IT_OnRPCSendNameTag(fromplayerid, toplayerid, bool:show)
+{
+	new
+		BitStream:bs = BS_New();
+
+	BS_WriteValue (
+		bs,
+		PR_UINT16, toplayerid,
+		PR_UINT8, show);
+	BS_RPC (bs, fromplayerid, RPC_onShowPlayerNameTag, PR_LOW_PRIORITY, PR_RELIABLE_ORDERED);
+	BS_Delete (bs);
 	return 1;
 }
