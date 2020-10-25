@@ -20,15 +20,15 @@
 	#define MAX_ITAG_FORMAT_STRING 32
 #endif
 
-#if !defined ITAG_LABEL_DISTANCE
+#if !defined ITAG_LABEL_DISTANCE // Дистанция с которой видно созданныйе 3D text
 	#define ITAG_LABEL_DISTANCE 10.0
 #endif
 
-#if !defined ITAG_DRAW_DISTANCE 
+#if !defined ITAG_DRAW_DISTANCE // Дистанция с которой игроку будет создан 3D text
 	#define ITAG_DRAW_DISTANCE 300.0
 #endif
 
-#if !defined ITAG_LABEL_STATUS
+#if !defined ITAG_LABEL_STATUS 
 	#define ITAG_LABEL_STATUS true
 #endif
 
@@ -36,8 +36,8 @@
 	#define IT_TAG_STATUS true
 #endif
 
-#if !defined ITAG_COLOR
-	#define ITAG_COLOR 0xFFFFFFFF
+#if !defined ITAG_LABEL_COLOR // Цвет 3D text
+	#define ITAG_LABEL_COLOR 0xFFFFFFFF
 #endif
 
 /*
