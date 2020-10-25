@@ -25,39 +25,7 @@ static
 	gTagLabelColor,
 	Float:gTagLabelDistance,
 	bool:gTagLabel,
-	bool:gTagStatus;
-
-/*
-    OnGameModeInit
-*/
-
-#if defined _inc_y_hooks || defined _INC_y_hooks
-	hook OnGameModeInit()
-#else
-	public OnGameModeInit()
-#endif
-	{
-		gTagStatus = true;
-
-		#if defined ITAG_OnGameModeInit
-			return ITAG_OnGameModeInit();
-		#else
-			return 1;
-		#endif
-	}
-
-#if !defined _inc_y_hooks && !defined _INC_y_hooks
-	#if defined _ALS_OnGameModeInit
-		#undef OnGameModeInit
-	#else
-		#define _ALS_OnGameModeInit
-	#endif
-
-	#define OnGameModeInit ITAG_OnGameModeInit
-	#if defined ITAG_OnGameModeInit
-		forward ITAG_OnGameModeInit();
-	#endif
-#endif
+	bool:gTagStatus = IT_TAG_STATUS;
 
 /*
     OnPlayerConnect

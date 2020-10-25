@@ -32,6 +32,10 @@
 	#define ITAG_LABEL_STATUS true
 #endif
 
+#if !defined IT_TAG_STATUS
+	#define IT_TAG_STATUS true
+#endif
+
 #if !defined ITAG_COLOR
 	#define ITAG_COLOR 0xFFFFFFFF
 #endif
