@@ -25,7 +25,7 @@
 #endif
 
 #if !defined ITAG_DRAW_DISTANCE 
-	#define ITAG_DRAW_DISTANCE 300
+	#define ITAG_DRAW_DISTANCE 300.0
 #endif
 
 #if !defined ITAG_LABEL_STATUS
@@ -55,7 +55,6 @@ enum e_ITAG_INFO {
         Text3D:e_T3DText,
     #endif 
 
-	e_TName[MAX_PLAYER_NAME + 1],
 	bool:e_TShow,
 	bool:e_TShowLabel,
 }

@@ -11,7 +11,7 @@
 */
 
 #if ITAG_DEBUG_INFO
-	new IT_DebugStr[144];
+	static IT_DebugStr[144];
 
 	#define IT_DebugMessageError(%1) \
 		format(IT_DebugStr, sizeof(IT_DebugStr), %1), printf("IT_Error: " %1, IT_DebugStr)
@@ -20,7 +20,11 @@
 
 static
 	gTagInfo[MAX_PLAYERS][e_ITAG_INFO],
+
 	gTagText[MAX_ITAG_FORMAT_STRING],
+	gTagLabelColor,
+	Float:gTagLabelDistance,
+	bool:gTagLabel,
 	bool:gTagStatus;
 
 /*
@@ -65,7 +69,6 @@ static
 	public OnPlayerConnect(playerid)
 #endif
 	{
-		GetPlayerName(playerid, gTagInfo[playerid][e_TName], MAX_PLAYER_NAME);
 		IT_ResetNameTagInfo(playerid);
 		#if defined ITAG_OnPlayerConnect
 			return ITAG_OnPlayerConnect(playerid);
@@ -124,13 +127,17 @@ static
 	public OnPlayerStreamIn(playerid, forplayerid)
 #endif
 	{
-		if (!gTagStatus && gTagInfo[playerid][e_TShow]) {
-			IT_Enable3DNameTagType(forplayerid, playerid, false, .inputtext = strlen(gTagText) > 0 ? gTagText : "");
+		if ((!gTagStatus && gTagInfo[playerid][e_TShow]) || (gTagStatus && !gTagInfo[playerid][e_TShow])) {
+			IT_Enable3DNameTagType(forplayerid, playerid, false, gTagLabel, gTagLabelDistance, gTagLabelColor, strlen(gTagText) > 0 ? gTagText : "");
+			printf("created 1 for %d from %d", playerid, forplayerid);
+		}
+
+		if ((!gTagStatus && gTagInfo[forplayerid][e_TShow]) || (gTagStatus && !gTagInfo[forplayerid][e_TShow])) {
+			IT_Enable3DNameTagType(playerid, forplayerid, false, gTagLabel, gTagLabelDistance, gTagLabelColor, strlen(gTagText) > 0 ? gTagText : "");
+
+			printf("created 2 for %d from %d", forplayerid, playerid);
 		} 
 
-		if (gTagStatus && !gTagInfo[playerid][e_TShow]) {
-			IT_Enable3DNameTagType(forplayerid, playerid, false, .inputtext = strlen(gTagText) > 0 ? gTagText : "");
-		}
 		#if defined ITAG_OnPlayerStreamIn
 			return ITAG_OnPlayerStreamIn(playerid, forplayerid);
 		#else
@@ -151,14 +158,36 @@ static
 	#endif
 #endif
 
+#if defined _inc_y_hooks || defined _INC_y_hooks
+	hook OnPlayerStreamOut(playerid, forplayerid)
+#else
+	public OnPlayerStreamOut(playerid, forplayerid)
+#endif
+	{
+
+		#if defined ITAG_OnPlayerStreamOut
+			return ITAG_OnPlayerStreamOut(playerid, forplayerid);
+		#else
+			return 1;
+		#endif
+	}
+
+#if !defined _inc_y_hooks && !defined _INC_y_hooks
+	#if defined _ALS_OnPlayerStreamOut
+		#undef OnPlayerStreamOut
+	#else
+		#define _ALS_OnPlayerStreamOut
+	#endif
+
+	#define OnPlayerStreamOut ITAG_OnPlayerStreamOut
+	#if defined ITAG_OnPlayerStreamOut
+	    forward ITAG_OnPlayerStreamOut(playerid, forplayerid);
+	#endif
+#endif
+
 /*
     stock
 */
-
-stock getplayer(playerid)
-{
-	return gTagInfo[playerid][e_TShow];
-}
 
 stock IT_Enable3DNameTagType(fromplayerid, toplayerid = INVALID_PLAYER_ID, bool:enableTag, bool:enableLabel = ITAG_LABEL_STATUS, Float:drawDistanceLabel = ITAG_LABEL_DISTANCE, color = ITAG_COLOR, const inputtext[] = "")
 {
@@ -170,6 +199,12 @@ stock IT_Enable3DNameTagType(fromplayerid, toplayerid = INVALID_PLAYER_ID, bool:
 		if (gTagStatus == enableTag) {
 			return IT_DebugMessageError("NameTag is now %s", enableTag ? "enable" : "disable");
 		}
+		
+		if (!gTagLabel) {
+			gTagLabel = enableLabel;
+			gTagLabelColor = color;
+			gTagLabelDistance = drawDistanceLabel;
+		}
 
 		gTagStatus = enableTag;
 		
@@ -179,17 +214,16 @@ stock IT_Enable3DNameTagType(fromplayerid, toplayerid = INVALID_PLAYER_ID, bool:
 					continue;
 				}
 		#else
-			for (playerid = GetPlayerPoolSize(); playerid != -1; playerid--) {
+			for (new playerid = GetPlayerPoolSize(); playerid != -1; playerid--) {
 				if (!IsPlayerConnected(playerid)) {
 					continue;
 				}
 		#endif
 				IT_Enable3DNameTag(fromplayerid, playerid, enableTag, enableLabel, drawDistanceLabel, color, inputtext);
-				printf("%d ", playerid);
 			}
 	} else {
 		if (gTagInfo[toplayerid][e_TShow] == enableTag) {
-			return IT_DebugMessageError("The player %s[%d] already has NameTag %s", gTagInfo[toplayerid][e_TName], toplayerid, enableTag ? "enable" : "disable");
+			return IT_DebugMessageError("The player [%d] already has NameTag %s", toplayerid, enableTag ? "enable" : "disable");
 		}
 
 		IT_Enable3DNameTag(fromplayerid, toplayerid, enableTag, enableLabel, drawDistanceLabel, color, inputtext);
@@ -200,20 +234,32 @@ stock IT_Enable3DNameTagType(fromplayerid, toplayerid = INVALID_PLAYER_ID, bool:
 stock IT_Update3DNameTag(playerid, bool:enableLabel = ITAG_LABEL_STATUS, color = ITAG_COLOR, const inputtext[] = "")
 {
 	if (gTagInfo[playerid][e_TShow]) {
-		return IT_DebugMessageError("Player %d not disabled NameTag.", playerid);
+		return IT_DebugMessageError("The player %d not disabled NameTag.", playerid);
 	}
 
 	if (gTagInfo[playerid][e_TShowLabel] == enableLabel) {
-		return IT_DebugMessageError("The player %s[%d] already has 3D text %s", gTagInfo[playerid][e_TName], playerid, enableLabel ? "enable" : "disable");
+		return IT_DebugMessageError("The player [%d] already has 3D text %s", playerid, enableLabel ? "enable" : "disable");
+	}
+
+	if (!enableLabel) {
+		IT_ResetNameTagInfo(playerid, false);
+	}
+	
+	new Float:player_x, Float:player_y, Float:player_z;
+	GetPlayerPos(playerid, player_x, player_y, player_z);
+
+	if (strlen(inputtext) > 0) {
+		gTagText[0] = '\0';
+
+		format(gTagText, MAX_ITAG_FORMAT_STRING, "%s", inputtext);
 	}
 
 	#if defined _streamer_included
-		//UpdateDynamic3DTextLabelText(gTagInfo[toplayerid][e_T3DText], color, const text[]);
-		gTagInfo[toplayerid][e_T3DText] = CreateDynamic3DTextLabel(gTagText, color, player_x, player_y, player_z + 0.17, drawdistance, toplayerid, .testlos = 1);
+		UpdateDynamic3DTextLabelText(gTagInfo[playerid][e_T3DText], color, gTagText);
 	#else
-		gTagInfo[toplayerid][e_T3DText] = Create3DTextLabel(gTagText, color, 0.0, 0.0, 0.0, drawdistance, -1, 1);
-		Attach3DTextLabelToPlayer(gTagInfo[toplayerid][e_T3DText], toplayerid, 0.0, 0.0, 0.17);
+		Update3DTextLabelText(gTagInfo[playerid][e_T3DText], color, gTagText);
 	#endif
+	gTagInfo[playerid][e_TShowLabel] = enableLabel;
 	return 1;
 }
 
@@ -240,8 +286,16 @@ stock IT_Update3DNameTagToAll(bool:enableLabel = ITAG_LABEL_STATUS, color = ITAG
 			if (!IsPlayerConnected(playerid)) {
 				continue;
 			}
-	#endif
-			UpdateDynamic3DTextLabelText(gTagInfo[playerid][e_T3DText], color, gTagText);
+	#endif	
+			if (!enableLabel) {
+				IT_ResetNameTagInfo(playerid, false);
+			}
+
+			#if defined _streamer_included
+				UpdateDynamic3DTextLabelText(gTagInfo[playerid][e_T3DText], color, gTagText);
+			#else
+				Update3DTextLabelText(gTagInfo[playerid][e_T3DText], color, gTagText);
+			#endif
 			gTagInfo[playerid][e_TShowLabel] = enableLabel;
 		}
 		return 1;
@@ -249,11 +303,11 @@ stock IT_Update3DNameTagToAll(bool:enableLabel = ITAG_LABEL_STATUS, color = ITAG
 
 static stock IT_Enable3DNameTag(fromplayerid, toplayerid, bool:enableTag, bool:enableLabel = ITAG_LABEL_STATUS, Float:drawDistanceLabel = ITAG_LABEL_DISTANCE, color = ITAG_COLOR, const inputtext[] = "")
 {
-	static Float:player_x, Float:player_y, Float:player_z;
+	new Float:player_x, Float:player_y, Float:player_z;
 	GetPlayerPos(toplayerid, player_x, player_y, player_z);
 
 	if (!enableTag) {
-		if (GetPlayerDistanceFromPoint(fromplayerid, player_x, player_y, player_z) <= 300.0) {
+		if (IsPlayerInRangeOfPoint(fromplayerid, ITAG_DRAW_DISTANCE, player_x, player_y, player_z)) {
 			if (!gTagInfo[toplayerid][e_T3DText]) {
 				gTagInfo[toplayerid][e_TShow] = enableTag;
 				if (enableLabel) {
@@ -262,8 +316,10 @@ static stock IT_Enable3DNameTag(fromplayerid, toplayerid, bool:enableTag, bool:e
 					if (strlen (inputtext) > 0) {
 						format(gTagText, MAX_ITAG_FORMAT_STRING, "%s", inputtext);
 					} else {
-						format(gTagText, MAX_ITAG_FORMAT_STRING, "%s(%d)", gTagInfo[toplayerid][e_TName], toplayerid);
+						format(gTagText, MAX_ITAG_FORMAT_STRING, "%d", toplayerid);
 					}
+
+					//format(gTagText, MAX_ITAG_FORMAT_STRING, "%s", strlen (inputtext) > 0 inputtext : toplayerid);
 
 					#if defined _streamer_included
 						gTagInfo[toplayerid][e_T3DText] = CreateDynamic3DTextLabel(gTagText, color, player_x, player_y, player_z + 0.20, drawDistanceLabel, toplayerid, .testlos = 1);
@@ -279,7 +335,7 @@ static stock IT_Enable3DNameTag(fromplayerid, toplayerid, bool:enableTag, bool:e
 	} else {
 		IT_ResetNameTagInfo(toplayerid, enableTag);
 
-	showPlayerNameTag:
+showPlayerNameTag:
 		#if defined PAWNRAKNET_INC_
 			IT_OnRPCSendNameTag(fromplayerid, toplayerid, enableTag); // for toplayer
 
