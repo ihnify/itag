@@ -25,7 +25,7 @@
 #endif
 
 #if !defined ITAG_DRAW_DISTANCE // Дистанция с которой игроку будет создан 3D text
-	#define ITAG_DRAW_DISTANCE 300.0
+	#define ITAG_DRAW_DISTANCE 30.0
 #endif
 
 #if !defined ITAG_LABEL_STATUS 
